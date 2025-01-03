@@ -1,0 +1,951 @@
+from cmu_graphics import *
+import math
+import random
+from PIL import Image 
+import os, pathlib                                                          
+
+def loadSound(relativePath):
+    absolutePath = os.path.abspath(relativePath)
+    url = pathlib.Path(absolutePath).as_uri()
+    return Sound(url)
+
+# onAppStart -----------------------------------------------------------------------------------------------------
+
+def paletasParlor_onAppStart(app):
+    app.width = 1000
+    app.height = 750
+
+    #sounds
+    app.sound1 = loadSound("bgm.mp3") #https://www.youtube.com/watch?v=kj1MDJXJ7-I
+
+    #colors
+    app.cream = rgb(255, 243, 217)
+    app.table = rgb(247, 218, 197)
+    app.tableTop = rgb(228, 179, 136)
+    app.text = rgb(230,213,159)
+    app.textBox = rgb(126, 145, 27)
+    app.window = rgb(215, 233, 219)
+    app.windowPane = rgb(164,183,179)
+
+    #start screen
+    app.startPress = False
+    app.addFlav = False
+    app.addDip = False
+    app.addTopping = False
+
+    app.points = 0
+
+    #popsicle setup
+    app.stickX = 500
+    app.stickY = 680
+    app.popsicleList = PopsicleGroup(app.stickX, app.stickY, flavor = 'None', dip = 'None', topping = 'None', toppingPositions = ())    #initialize with list with nothing
+    app.currPopsicle = Popsicle(app.stickX, app.stickY, flavor = 'None', dip = 'None', topping = 'None', toppingPositions = ())
+
+    app.inBarrier = False
+    app.inTrashX = 0
+    app.inTrashY = 0
+
+    #stuff on flavor screen
+    app.chosenFlav = None
+    app.readyFreeze = False
+    app.freezing = False
+    app.leftFreezer = False
+    app.timer = 5
+    app.stepsPerSecond = 1
+    app.stepsPerSecondB = 0.05
+    app.paused = True
+    strawberry = Flavor('Strawberry', rgb(174,36,54), (200, 435))
+    oreo = Flavor('Oreo', rgb(3,82,168), (310, 555))
+    app.flavorList = [strawberry, oreo]
+
+    #stuff on dip screen
+    app.chosenDip = None
+    fudge = Dip('Fudge', rgb(90,47,41), (200, 435))
+    honey = Dip('Honey', rgb(214,156,84), (310, 555))
+    app.dipList = [fudge, honey]
+
+    #stuff on topping screen
+    app.chosenTopping = None
+    app.placeSprinkle = False
+    app.xPress = 0
+    app.yPress = 0
+    app.readyToTop = False
+    app.dragDraw = False
+    
+    #each topping type
+    app.imageA = openImage('sprinkleTub.png')   #https://previews.123rf.com/images/zakspeed271/zakspeed2712004/zakspeed271200400097/145509376-colorful-hundreds-and-thousands-cake-sprinkles-in-a-plastic-tub-creating-a-circle.jpg
+    app.sprinkleImage = app.imageA.resize((220, 150))
+    app.sprinkleImage = CMUImage(app.sprinkleImage)
+    app.sprPurple = rgb(134,58,117)
+    app.sprGreen = rgb(178,204,69)
+    app.sprBlue = rgb(107,199,214)
+    app.sprWhite = 'white'
+    app.sprPink = rgb(244,99,133)
+    app.sprinklePositions = []
+    app.orderSprinklePos = []
+    sprinkles = Topping('Sprinkles', app.sprinkleImage, (200, 435), app.sprinklePositions)
+    app.toppingList = [sprinkles]
+    app.creamPositions = []
+    app.orderCreamPos = []
+    app.marshmallowPositions = []
+    app.orderMarshPos = []
+    app.tapiocaPositions = []
+    app.orderTapiocaPos = []
+    app.peanutsPositions = []
+    app.orderNutPos = []
+    app.topPos = ()
+
+    #order setup
+    app.orderList = orderedPaleta(flavor = strawberry, dip = fudge, topping = sprinkles, toppingPositions = (app.stickX, app.stickY))
+    app.currOrder = Popsicle(900, 150, app.flavorList[0], app.dipList[0], app.toppingList[0], (app.orderSprinklePos))
+
+def openImage(fileName):
+    return Image.open(os.path.join(pathlib.Path(__file__).parent,fileName))
+
+# -----------------------------------------------------------------------------------------------------
+
+class Flavor:
+    def __init__(self, name, color, position):
+        self.color = color
+        self.name = name
+        self.position = position
+
+    def draw(self):
+        xPos, yPos = self.position[0], self.position[1]
+        drawCircle(xPos, yPos, 55, fill = self.color, border = rgb(77, 87, 94))
+        if self.name == 'Vanilla' or self.name == 'Pistachio':
+            drawLabel(self.name, xPos, yPos, align = 'center', fill = 'black', 
+                      font = 'monospace', bold = True, size = 15)
+        else:
+            drawLabel(self.name, xPos, yPos, align = 'center', fill = rgb(255, 243, 217), 
+                      font = 'monospace', bold = True, size = 15)
+
+    def drawOnPaleta(self, stickX, stickY, chosenFlav):
+        if chosenFlav is not None:
+            drawOval(stickX, stickY - 20, 40, 30, align = 'center', 
+                     fill = chosenFlav.color)
+
+# -----------------------------------------------------------------------------------------------------
+
+class Dip:
+    def __init__(self, name, color, position):
+        self.color = color
+        self.name = name
+        self.position = position
+
+    def draw(self):
+        xPos, yPos = self.position[0], self.position[1]
+        drawCircle(xPos, yPos, 55, fill = self.color, border = rgb(77, 87, 94))
+        if self.name == 'Caramel' or self.name == 'Honey':
+            drawLabel(self.name, xPos, yPos, align = 'center', fill = 'black', 
+                      font = 'monospace', bold = True, size = 15) 
+        else:
+            drawLabel(self.name, xPos, yPos, align = 'center', fill = rgb(255, 243, 217), 
+                      font = 'monospace', bold = True, size = 15)
+
+# -----------------------------------------------------------------------------------------------------
+
+class Topping:
+    def __init__(self, name, image, tubPosition, toppingPosition):                             
+        self.image = image
+        self.name = name
+        self.position = tubPosition
+        self.toppingPosition = toppingPosition
+
+    def draw(self):
+        xPos, yPos = self.position[0], self.position[1]
+        drawImage(self.image, xPos, yPos, align = 'center')
+        if self.name == 'Sprinkles':
+            drawLabel(self.name, xPos - 10, yPos, align = 'center', fill = 'black', 
+                      font = 'monospace', bold = True, size = 18)
+        elif self.name == 'Marshmallows':
+            drawLabel(self.name, xPos + 10, yPos, align = 'center', fill = 'black', 
+                      font = 'monospace', bold = True, size = 15)
+        elif self.name == 'Peanuts':
+            drawLabel(self.name, xPos, yPos, align = 'center', fill = 'black', 
+                  font = 'monospace', bold = True, size = 19)
+        else:
+            drawLabel(self.name, xPos, yPos, align = 'center', fill = 'black', 
+                      font = 'monospace', bold = True, size = 15)
+            
+    def paletaToppings(self, addedTopping):
+        self.toppingPosition = ()
+        self.toppingPosition += addedTopping
+
+# -----------------------------------------------------------------------------------------------------
+
+class Popsicle:
+    def __init__(self, stickX, stickY, flavor, dip, topping, toppingPositions):
+        self.stickX = stickX
+        self.stickY = stickY
+        self.flavor = flavor
+        self.dip = dip
+        self.topping = topping
+        self.toppingPositions = toppingPositions
+
+    def setFlav(self, newFlav):
+        self.flavor = newFlav
+        newFlav.drawOnPaleta(self.stickX, self.stickY, newFlav)
+    def setDip(self, newDip):
+        self.dip = newDip
+        newDip.draw()
+    def setTopping(self, newTopping):
+        self.topping = newTopping
+        newTopping.draw()
+    def addTopping(self, newTopping):
+        self.toppingPositions.paletaToppings(newTopping)
+
+    def setPosition(self, newX, newY):
+        self.stickX = newX
+        self.stickY = newY
+    
+    def draw(self, stickX, stickY):
+        drawRect(stickX, stickY, 20, 30, align = 'center', fill = rgb(226,170,103))
+
+# -----------------------------------------------------------------------------------------------------
+
+class PopsicleGroup:
+    def __init__(self, stickX, stickY, flavor, dip, topping, toppingPositions):
+        self.popsicleList = []
+        self.stickX = stickX
+        self.stickY = stickY
+        self.addPopsicle(flavor, dip, topping, toppingPositions)
+    
+    def addPopsicle(self, flavor, dip, topping, toppingPositions): #change parameters to just popsicle
+        self.newPopsicle = Popsicle(self.stickX, self.stickY, flavor, dip, topping, toppingPositions)
+        self.popsicleList.append(self.newPopsicle)
+
+    def trashedPopsicle(self, popsicle):
+        if popsicle in self.popsicleList:
+            self.popsicleList.remove(popsicle)                                                 #NOTE: how to remove drawing from screen
+
+    def displayPopsicle(self, stickX, stickY):
+        drawRect(stickX, stickY, 20, 30, align = 'center', fill = rgb(226,170,103))
+
+# -----------------------------------------------------------------------------------------------------
+
+class orderedPaleta: #NOTE: increase difficulty based on time taken to finish orders. generate randomization function and the more mistakes they make, the less likely new orders are to show up. if they're doing rly good, increase amount of included toppings
+    def __init__(self, flavor, dip, topping, toppingPositions):
+        self.orderList = []
+        self.flavor = flavor
+        self.dip = dip
+        self.topping = topping
+        self.toppingPositions = toppingPositions
+        self.addPopsicle(flavor, dip, topping, toppingPositions)
+    
+    def addPopsicle(self, flavor, dip, topping, toppingPositions):
+        self.newOrder = Popsicle(500, 680, flavor, dip, topping, toppingPositions)
+        self.orderList.append(self.newOrder)
+
+    def displayPopsicle(self):
+        drawRect(900, 150, 20, 30, align = 'center', fill = rgb(226,170,103))
+
+# order queue --------------------------------------------------------------------------------------------------------
+
+def createRandomOrder(app):
+    flavLen = len(app.flavorList)
+    flavIndex = random.randint(0, flavLen - 1)
+    orderFlav = app.flavorList[flavIndex]
+
+    dipLen = len(app.dipList)
+    dipIndex = random.randint(0, dipLen - 1)
+    orderDip = app.dipList[dipIndex]
+
+    toppingLen = len(app.toppingList)
+    amtToppings = random.randint(0, toppingLen - 1)
+    orderTop = []
+    for topping in range(amtToppings):
+        orderTop = random.sample(app.toppingList, amtToppings)
+    orderTop = tuple(orderTop)
+    app.topPos = []
+    for topping in orderTop:
+        # sprinkles
+        if topping == app.toppingList[0]:
+            for i in range(4):
+                x = random.randint(app.stickX - 30, app.stickX + 31)
+                y = random.randint(app.stickY - 55, app.stickY + 56)
+                app.orderSprinklePos.append((x, y))
+            app.topPos.append(app.orderSprinklePos)
+        # whipped cream
+        elif len(app.toppingList) >= 2 and topping == app.toppingList[1]:
+            for i in range(4):
+                x = random.randint(app.stickX - 30, app.stickX + 31)
+                y = random.randint(app.stickY - 55, app.stickY + 56)
+                app.orderCreamPos.append((x, y))
+            app.topPos.append(app.orderCreamPos)
+        # marshmallows
+        elif len(app.toppingList) >= 3 and topping == app.toppingList[2]:
+            for i in range(4):
+                x = random.randint(app.stickX - 30, app.stickX + 31)
+                y = random.randint(app.stickY - 55, app.stickY + 56)
+                app.orderMarshPos.append((x, y))
+            app.topPos.append(app.orderMarshPos)
+        # tapioca
+        elif len(app.toppingList) >= 4 and topping == app.toppingList[3]:
+            for i in range(4):
+                x = random.randint(app.stickX - 30, app.stickX + 31)
+                y = random.randint(app.stickY - 55, app.stickY + 56)
+                app.orderTapiocaPos.append((x, y))
+            app.topPos.append(app.orderTapiocaPos)
+        # peanuts
+        elif len(app.toppingList) == 5 and topping == app.toppingList[4]:
+            for i in range(4):
+                x = random.randint(app.stickX - 30, app.stickX + 31)
+                y = random.randint(app.stickY - 55, app.stickY + 56)
+                app.orderNutPos.append((x, y))
+            app.topPos.append(app.orderNutPos)
+    app.topPos = tuple(app.topPos)
+    
+    app.orderList.addPopsicle(orderFlav, orderDip, orderTop, app.topPos)
+    print(app.orderList)
+
+# welcome screen -----------------------------------------------------------------------------------------------------
+
+def welcome_redrawAll(app):
+    app.sound1.play(loop = True)
+
+    drawRect(0, 0, app.width, app.height, fill = app.cream)                     #background
+    points = [475, 120, 500, 70, 525, 115]                                      #closed sign strings
+    drawPolygon(*points, fill = None, border = rgb(99,101,104))                 #closed sign
+    drawRect(500, 120, 80, 30, align = 'center', fill = rgb(120, 54, 42),   
+             rotateAngle = -10)
+    drawLabel('CLOSED', 500, 120, align = 'center', bold = True, 
+              fill = app.table, font = 'monospace', size = 20, 
+              rotateAngle = -10)
+    
+    drawLabel('welcome to', app.width // 2, 275, align = 'center',              #welcome
+              fill = rgb(178,168,109), size = 43, font = 'monospace', bold = True)
+    drawLabel('Paleta Parlor', app.width // 2, 345, align = 'center',           #paleta parlor
+              fill = rgb(209,115,59), size = 100, font = 'monospace', bold = True)
+
+    drawRect(app.width // 2, 580, 300, 140, align = 'center',                   #start button
+             fill = rgb(118,134,10), borderWidth = 10, border = app.text)      
+    drawLabel('start', app.width // 2, 580, align = 'center', 
+              fill = app.text, size = 50, font = 'monospace')
+    drawLabel("press 'enter' to begin", app.width // 2, 690, align = 'center',
+              fill = rgb(118, 134, 10), size = 30, font = 'monospace', bold = True)
+
+def welcome_onKeyPress(app, key):                                               #enter the game
+    for i in range(4):
+        createRandomOrder(app)
+    if key == 'enter':
+        unlockNewOptions(app)
+        setActiveScreen('gameFlav')
+
+# first game screen: flavors -----------------------------------------------------------------------------------------------------
+
+
+def gameFlav_redrawAll(app):
+    
+    drawRect(0, 0, app.width, app.height, fill = app.cream)                     #background
+    drawRect(500, 140, 175, 210, align = 'center', fill = app.window,           #door
+             border = app.windowPane)
+    drawOval(210, 135, 150, 100, fill = app.window, border = app.windowPane)    #left window   
+    drawOval(790, 135, 150, 100, fill = app.window, border = app.windowPane)    #right window                                    
+    drawRect(0, 250, app.width, 500, fill = app.table)                          #table
+    drawRect(0, 250, app.width, 50, fill = app.tableTop)                        #table top
+    drawRect(0, 300, app.width, 10, fill = rgb(150,98,61), opacity = 50)        #table shadow
+    points = [0, 250, 10, 235, 990, 235, 1000, 250]                             #table top pointy party
+    drawPolygon(*points, fill = app.tableTop)                               
+    points = [475, 120, 500, 70, 525, 115]                                      #open sign strings
+    drawPolygon(*points, fill = None, border = rgb(99,101,104))                 #open sign
+    drawRect(500, 120, 80, 30, align = 'center', fill = rgb(120, 54, 42),   
+             rotateAngle = -10)
+    drawLabel('OPEN', 500, 120, align = 'center', bold = True, 
+              fill = app.table, font = 'monospace', size = 20, 
+              rotateAngle = -10)
+
+    
+    #freezer
+    drawRect(75, 650, 135, 60, fill = rgb(134, 171, 179), border = rgb(77, 87, 94))
+    drawLabel('FREEZE', 141, 680, align = 'center', font = 'monospace',
+                  fill = app.table, size = 30, bold = True)
+        
+    #trash 
+    drawRect(790, 650, 135, 60, fill = rgb(173, 57, 22), border = rgb(123, 40, 15))
+    drawLabel('TRASH', 857, 680, align = 'center', font = 'monospace', fill = app.table, 
+                  size = 30, bold = True)
+        
+    #point display
+    drawLabel(f'Your Points: {app.points}', 100, 20, font = 'monospace', 
+              fill = rgb(120, 54, 42), size = 20)
+
+    xPos1 = 167
+    yPos1 = 275
+    for popsicle in app.orderList.orderList:
+        theFlav = popsicle.flavor
+        theDip = popsicle.dip
+        theTop = popsicle.topping
+        drawRect(xPos1, yPos1, 20, 30, align = 'center', fill = rgb(226,170,103))
+        drawRect(xPos1, yPos1 - 60, 60, 110, align = 'center',
+                 fill = theFlav.color)
+        pointsX = [xPos1 - 30, yPos1 - 115, 
+                  xPos1 + 30, yPos1 - 115,
+                  xPos1 + 30, yPos1 - 30,
+                  xPos1 - 30, yPos1 - 15]
+        drawPolygon(*pointsX, fill = theDip.color)
+        xPos1 += 167
+
+    # -- flavors -- 
+    
+    #label box
+    drawRect(500, 350, 100, 30, align = 'center', fill = app.textBox, opacity = 70)
+    
+    #label
+    drawLabel('flavors', 500, 350, align = 'center', fill = app.text, size = 20, 
+              font = 'monospace', bold = True)
+    
+    for flavor in app.flavorList:
+        flavor.draw()
+        
+    #popsicle stick
+    app.currPopsicle.draw(app.stickX, app.stickY)
+
+    #blob of flavored cream
+    if app.chosenFlav is not None:
+        app.currPopsicle.setFlav(app.chosenFlav)
+    
+    #becomes paleta and timer starts
+    if app.readyFreeze and app.freezing:
+        drawLabel(f'freezing time left: {app.timer} sec', 150, 630, size = 17,  
+                  align = 'center', fill = rgb(77, 87, 94), font = 'monospace', bold = True)
+        drawRect(app.stickX, app.stickY - 60, 60, 110, align = 'center',
+                 fill = app.chosenFlav.color)
+        
+    #dropped in trash
+    if app.inTrashX != 0 and app.inTrashY != 0:
+        app.popsicleList.trashedPopsicle(app.currPopsicle)
+        app.popsicleList.displayPopsicle(500, 680)
+
+def gameFlav_onStep(app):
+    if not app.paused and app.timer > 0:
+        app.timer -= 1
+
+def gameFlav_onMouseDrag(app, mouseX, mouseY):                                  
+    if abs(mouseX - app.stickX) <= 20 and abs(mouseY - app.stickY) <= 30:
+        app.stickX = mouseX
+        app.stickY = mouseY
+        app.currPopsicle.setPosition(mouseX, mouseY)
+    # if 0 < app.timer < 5:
+    #     if mouseX < 75 or mouseX > 210 or mouseY > 710 or mouseY < 650:
+    #         app.leftFreezer = True
+    # if app.leftFreezer == True:
+    #     leftFreezerPoints(app)
+    #     app.leftFreezer = False
+
+def gameFlav_onMouseRelease(app, mouseX, mouseY):
+    #choose flavor and have blob of cream
+    for flavor in app.flavorList:
+        if distance(app.stickX, app.stickY, flavor.position[0], flavor.position[1]) <= 55:
+            app.chosenFlav = flavor
+            app.readyFreeze = True
+    
+    #freeze the cream to form final paleta shape
+    if 75 <= mouseX <= 210 and 650 <= mouseY <= 710:
+        app.freezing = True
+        app.paused = False
+        if app.timer == 0:
+            app.paused = True
+
+    #in trash
+    if 790 <= mouseX <= 925 and 650 <= mouseY <= 710:
+        app.inTrashX = mouseX
+        app.inTrashY = mouseY
+        app.currPopsicle = Popsicle(app.stickX, app.stickY, flavor = 'None', dip = 'None', topping = 'None', toppingPositions = 'None')
+        app.points -= 20
+    
+def gameFlav_onKeyPress(app, key):                                               #continue to dips
+    if key == 'enter' and app.timer == 0:
+        setActiveScreen('gameDip')
+    app.stickX = 800
+    app.stickY = 550
+
+# second game screen: dips -----------------------------------------------------------------------------------------------------
+
+def gameDip_redrawAll(app):
+    drawRect(0, 0, app.width, app.height, fill = app.cream)                     #background
+    drawRect(500, 140, 175, 210, align = 'center', fill = app.window,           #door
+             border = app.windowPane)
+    drawOval(210, 135, 150, 100, fill = app.window, border = app.windowPane)    #left window   
+    drawOval(790, 135, 150, 100, fill = app.window, border = app.windowPane)    #right window                                    
+    drawRect(0, 250, app.width, 500, fill = app.table)                          #table
+    drawRect(0, 250, app.width, 50, fill = app.tableTop)                        #table top
+    drawRect(0, 300, app.width, 10, fill = rgb(150,98,61), opacity = 50)        #table shadow
+    points = [0, 250, 10, 235, 990, 235, 1000, 250]                             #table top pointy party
+    drawPolygon(*points, fill = app.tableTop)                               
+    points = [475, 120, 500, 70, 525, 115]                                      #open sign strings
+    drawPolygon(*points, fill = None, border = rgb(99,101,104))                 #open sign
+    drawRect(500, 120, 80, 30, align = 'center', fill = rgb(120, 54, 42),   
+             rotateAngle = -10)
+    drawLabel('OPEN', 500, 120, align = 'center', bold = True, 
+              fill = app.table, font = 'monospace', size = 20, 
+              rotateAngle = -10)
+
+    #trash 
+    drawRect(790, 650, 135, 60, fill = rgb(173, 57, 22), border = rgb(123, 40, 15))
+    drawLabel('TRASH', 857, 680, align = 'center', font = 'monospace', fill = app.table, 
+                  size = 30, bold = True)
+        
+    #point display
+    drawLabel(f'Your Points: {app.points}', 100, 20, font = 'monospace', 
+              fill = rgb(120, 54, 42), size = 20)
+
+    xPos1 = 167
+    yPos1 = 275
+    for popsicle in app.orderList.orderList:
+        theFlav = popsicle.flavor
+        theDip = popsicle.dip
+        theTop = popsicle.topping
+        drawRect(xPos1, yPos1, 20, 30, align = 'center', fill = rgb(226,170,103))
+        drawRect(xPos1, yPos1 - 60, 60, 110, align = 'center',
+                 fill = theFlav.color)
+        pointsX = [xPos1 - 30, yPos1 - 115, 
+                  xPos1 + 30, yPos1 - 115,
+                  xPos1 + 30, yPos1 - 30,
+                  xPos1 - 30, yPos1 - 15]
+        drawPolygon(*pointsX, fill = theDip.color)
+        xPos1 += 167
+
+# -- dips -- 
+    
+    #label box
+    drawRect(500, 350, 60, 30, align = 'center', fill = app.textBox, opacity = 70)
+
+    #label
+    drawLabel('dips', 500, 350, align = 'center', fill = app.text, size = 20, 
+              font = 'monospace', bold = True) 
+    
+    for dip in app.dipList:
+        dip.draw()
+        
+    #popsicle stick
+    drawRect(app.stickX, app.stickY, 20, 30, align = 'center', fill = rgb(226,170,103))
+    #form with flavor and without dip
+    drawRect(app.stickX, app.stickY - 60, 60, 110, align = 'center',
+             fill = app.chosenFlav.color)
+
+    #add dip
+    if app.chosenDip is not None:
+        pointsX = [app.stickX - 30, app.stickY - 115, 
+                  app.stickX + 30, app.stickY - 115,
+                  app.stickX + 30, app.stickY - 30,
+                  app.stickX - 30, app.stickY - 15]
+        drawPolygon(*pointsX, fill = app.chosenDip.color)
+        app.currPopsicle.setDip(app.chosenDip)
+
+def gameDip_onMouseDrag(app, mouseX, mouseY):                                  
+    #moving stick around
+    if ((app.stickX - 20) <= mouseX <= (app.stickX + 20) and 
+        (app.stickY - 30) <= mouseY <= (app.stickY + 30)):
+        app.stickX = mouseX
+        app.stickY = mouseY
+        app.currPopsicle.setPosition(mouseX, mouseY)
+
+def gameDip_onMouseRelease(app, mouseX, mouseY):
+    #choose flavor and have blob of cream
+    for dip in app.dipList:
+        if distance(app.stickX, app.stickY, dip.position[0], dip.position[1]) <= 55:
+            app.chosenDip = dip
+
+def gameDip_onKeyPress(app, key):                                               #continue to toppings
+    if key == 'enter':
+        setActiveScreen('gameToppings')
+    app.stickX = 800
+    app.stickY = 550
+
+# third game screen: toppings -----------------------------------------------------------------------------------------------------
+
+def gameToppings_redrawAll(app):
+    drawRect(0, 0, app.width, app.height, fill = app.cream)                     #background
+    drawRect(500, 140, 175, 210, align = 'center', fill = app.window,           #door
+             border = app.windowPane)
+    drawOval(210, 135, 150, 100, fill = app.window, border = app.windowPane)    #left window   
+    drawOval(790, 135, 150, 100, fill = app.window, border = app.windowPane)    #right window                                    
+    drawRect(0, 250, app.width, 500, fill = app.table)                          #table
+    drawRect(0, 250, app.width, 50, fill = app.tableTop)                        #table top
+    drawRect(0, 300, app.width, 10, fill = rgb(150,98,61), opacity = 50)        #table shadow
+    points = [0, 250, 10, 235, 990, 235, 1000, 250]                             #table top pointy party
+    drawPolygon(*points, fill = app.tableTop)                               
+    points = [475, 120, 500, 70, 525, 115]                                      #open sign strings
+    drawPolygon(*points, fill = None, border = rgb(99,101,104))                 #open sign
+    drawRect(500, 120, 80, 30, align = 'center', fill = rgb(120, 54, 42),   
+             rotateAngle = -10)
+    drawLabel('OPEN', 500, 120, align = 'center', bold = True, 
+              fill = app.table, font = 'monospace', size = 20, 
+              rotateAngle = -10)
+        
+    #point display
+    drawLabel(f'Your Points: {app.points}', 100, 20, font = 'monospace', 
+              fill = rgb(120, 54, 42), size = 20)
+
+    xPos1 = 167
+    yPos1 = 275
+    for popsicle in app.orderList.orderList:
+        theFlav = popsicle.flavor
+        theDip = popsicle.dip
+        theTop = popsicle.topping
+        drawRect(xPos1, yPos1, 20, 30, align = 'center', fill = rgb(226,170,103))
+        drawRect(xPos1, yPos1 - 60, 60, 110, align = 'center',
+                 fill = theFlav.color)
+        pointsX = [xPos1 - 30, yPos1 - 115, 
+                  xPos1 + 30, yPos1 - 115,
+                  xPos1 + 30, yPos1 - 30,
+                  xPos1 - 30, yPos1 - 15]
+        drawPolygon(*pointsX, fill = theDip.color)
+        xPos1 += 167
+
+# -- toppings -- 
+    
+    #label box
+    drawRect(500, 350, 110, 30, align = 'center', fill = app.textBox, opacity = 70)
+
+    #label
+    drawLabel('toppings', 500, 350, align = 'center', fill = app.text, size = 20, 
+              font = 'monospace', bold = True)
+    
+    #press enter after finishing toppings
+    drawLabel("press 'enter' as soon as you finish", 800, 338, fill = app.textBox, 
+              font = 'monospace', size = 15, bold = True)
+    drawLabel("placing the toppings on the paleta", 800, 358, fill = app.textBox,
+              font = 'monospace', size = 15, bold = True)
+              
+    for topping in app.toppingList:
+        topping.draw()
+        
+    #popsicle stick
+    drawRect(app.stickX, app.stickY, 20, 30, align = 'center', fill = rgb(226,170,103))
+    #form with flavor and dip without topping
+    drawRect(app.stickX, app.stickY - 60, 60, 110, align = 'center',
+             fill = app.chosenFlav.color)
+    pointsX = [app.stickX - 30, app.stickY - 115, 
+               app.stickX + 30, app.stickY - 115,
+               app.stickX + 30, app.stickY - 30,
+               app.stickX - 30, app.stickY - 15]
+    drawPolygon(*pointsX, fill = app.chosenDip.color)
+
+    # if ((abs(app.xPress - app.stickX) <= 29) and (app.yPress >= (app.stickY - 114)) and
+    #     (app.yPress = (app.stickY - 16))):
+    #     #add sprinkles
+    if app.chosenTopping == app.toppingList[0]:
+        if len(app.currPopsicle.toppingPositions) == 0:
+            app.currPopsicle.setTopping(app.chosenTopping)
+        else:
+            app.currPopsicle.addTopping(app.chosenTopping)
+        drawSprinkles(app)
+    #add whipped cream
+    elif len(app.toppingList) >= 2 and app.chosenTopping == app.toppingList[1]:
+        if len(app.currPopsicle.toppingPositions) == 0:
+            app.currPopsicle.setTopping(app.chosenTopping)
+        else:
+            app.currPopsicle.addTopping(app.chosenTopping)
+        drawWhips(app)
+    #add marshmallows
+    elif len(app.toppingList) >= 3 and app.chosenTopping == app.toppingList[2]:
+        if len(app.currPopsicle.toppingPositions) == 0:
+            app.currPopsicle.setTopping(app.chosenTopping)
+        else:
+            app.currPopsicle.addTopping(app.chosenTopping)
+        drawMarshmallows(app)
+    #add tapioca
+    elif len(app.toppingList) >= 4 and app.chosenTopping == app.toppingList[3]:
+        if len(app.currPopsicle.toppingPositions) == 0:
+            app.currPopsicle.setTopping(app.chosenTopping)
+        else:
+            app.currPopsicle.addTopping(app.chosenTopping)
+        drawTapiocas(app)
+    #add peanuts
+    elif len(app.toppingList) == 5 and app.chosenTopping == app.toppingList[4]:
+        if len(app.currPopsicle.toppingPositions) == 0:
+            app.currPopsicle.setTopping(app.chosenTopping)
+        else:
+            app.currPopsicle.addTopping(app.chosenTopping)
+        drawPeanuts(app)
+    
+def gameToppings_onMousePress(app, mouseX, mouseY):
+    #choose topping
+    for topping in app.toppingList:
+        if distance(mouseX, mouseY, topping.position[0], topping.position[1]) <= 75:
+            app.readyToTop = True
+            app.chosenTopping = topping
+
+
+    if ((abs(mouseX - app.stickX) <= 30) and (abs(mouseY - (app.stickY - 60) <= 55))):
+        app.xPress = mouseX
+        app.yPress = mouseY
+        #add sprinkles
+        if app.chosenTopping == app.toppingList[0]:
+            app.sprinklePositions.append((mouseX, mouseY))
+        #add whipped cream
+        elif app.chosenTopping == app.toppingList[1]:
+            app.creamPositions.append((mouseX, mouseY))
+        #add marshmallow
+        elif app.chosenTopping == app.toppingList[2]:
+            app.marshmallowPositions.append((mouseX, mouseY))
+        #add tapioca
+        elif app.chosenTopping == app.toppingList[3]:
+            app.tapiocaPositions.append((mouseX, mouseY))
+        #add peanuts
+        elif app.chosenTopping == app.toppingList[4]:
+            app.peanutsPositions.append((mouseX, mouseY))
+            
+def drawSprinkle(app, x, y):
+    drawRect(x, y + 5, 3, 5, align = 'center', fill = app.sprPurple)
+    drawRect(x + 5, y, 2, 8, align = 'center', fill = app.sprGreen, rotateAngle = 15)
+    drawRect(x, y - 5, 3, 5, align = 'center', fill = app.sprBlue, rotateAngle = 35)
+    drawRect(x - 4, y, 2, 8, align = 'center', fill = app.sprWhite)
+    drawRect(x - 5, y - 2, 3, 5, align = 'center', fill = app.sprPink, rotateAngle = 50)
+
+def drawSprinkles(app):
+    for i in app.sprinklePositions:
+        (x, y) = i
+        drawSprinkle(app, x, y)
+
+def drawWhip(app, x, y):
+    drawOval(x, y + 4, 14, 7, fill = rgb(247, 243, 241), border = 'black')
+    drawOval(x, y, 12, 7, fill = rgb(247, 243, 241), border = 'black')
+    drawOval(x, y - 3.5, 9, 7, fill = rgb(247, 243, 241), border = 'black')
+
+def drawWhips(app):
+    for i in app.creamPositions:
+        (x, y) = i
+        drawWhip(app, x, y)
+
+def drawMarshmallow(app, x, y):
+    drawRect(x, y + 5, 18, 17, align = 'center', fill = 'white', border = 'black')
+    drawOval(x, y, 18, 10, fill = 'white', border = 'black')
+
+def drawMarshmallows(app):
+    for i in app.marshmallowPositions:
+        (x, y) = i
+        drawMarshmallow(app, x, y)
+
+def drawTapioca(app, x, y):
+    drawCircle(x, y, 6, fill = rgb(89, 57, 43), border = 'white')
+
+def drawTapiocas(app):
+    for i in app.tapiocaPositions:
+        (x, y) = i
+        drawTapioca(app, x, y)
+
+def drawPeanut(app, x, y):
+    drawOval(x - 5, y + 4, 6, 3, fill = rgb(220, 172, 124), border = rgb(128, 70, 27), rotateAngle = 105)
+    drawOval(x - 2, y - 4, 5, 3, fill = rgb(220, 172, 124), border = rgb(128, 70, 27))
+    drawOval(x + 4, y - 5, 6, 3, fill = rgb(220, 172, 124), border = rgb(128, 70, 27), rotateAngle = 90)
+    drawOval(x + 2, y + 2, 5, 3, fill = rgb(220, 172, 124), border = rgb(128, 70, 27), rotateAngle = 25)
+    drawOval(x, y - 3, 6, 3, fill = rgb(220, 172, 124), border = rgb(128, 70, 27), rotateAngle = 45)
+
+def drawPeanuts(app):
+    for i in app.peanutsPositions:
+        (x, y) = i
+        drawPeanut(app, x, y)
+
+def gameToppings_onMouseRelease(app, mouseX, mouseY):
+    #choose topping
+    for topping in app.toppingList:
+        if distance(app.stickX, app.stickY, topping.position[0], topping.position[1]) <= 55:
+            app.chosenTopping = topping
+
+def gameToppings_onKeyPress(app, key):                                          #continue to final screen
+    finishedPoints(app)
+    orderFinished(app)
+    if key == 'enter':
+        setActiveScreen('finalServing')
+
+# third game screen: final serving -----------------------------------------------------------------------------------------------------
+
+def finalServing_redrawAll(app):
+    drawRect(0, 0, app.width, app.height, fill = rgb(178,168,109))                     #background
+    points = [475, 120, 500, 70, 525, 115]                                      #closed sign strings
+    drawPolygon(*points, fill = None, border = rgb(99,101,104))                 #closed sign
+    drawRect(500, 120, 80, 30, align = 'center', fill = rgb(120, 54, 42),   
+             rotateAngle = -10)
+    drawLabel('CLOSED', 500, 120, align = 'center', bold = True, 
+              fill = app.table, font = 'monospace', size = 20, 
+              rotateAngle = -10)
+    
+    drawLabel('congrats!', app.width // 2, 275, align = 'center',              #welcome
+              fill = rgb(118,134,10), size = 43, font = 'monospace', bold = True)
+    drawLabel(f'Your Points: {app.points}', app.width // 2, 345, align = 'center',           #paleta parlor
+              fill = app.cream, size = 90, font = 'monospace', bold = True)
+
+    drawRect(app.width // 2, 580, 300, 140, align = 'center',                   #start button
+             fill = app.cream, borderWidth = 10, border = app.text)      
+    drawLabel('replay', app.width // 2, 580, align = 'center', 
+              fill = rgb(118,134,10), size = 50, font = 'monospace')
+    drawLabel("press 'enter' to continue", app.width // 2, 690, align = 'center',
+              fill = rgb(118, 134, 10), size = 30, font = 'monospace', bold = True)
+    drawLabel("press 'r' to replay", app.width // 2, 490, align = 'center',
+              fill = rgb(118, 134, 10), size = 30, font = 'monospace', bold = True)
+
+
+def finalServing_onKeyPress(app, key):                                          #go back to beginning
+    if key == 'enter':
+        setActiveScreen('welcome')
+                                                #NOTE: PUT ALL INITIAL VARIABLES FROM APP START HERE
+    if key == 'r':
+        setActiveScreen('welcome')
+        #sounds
+        app.sound1 = loadSound("bgm.mp3") #https://www.youtube.com/watch?v=kj1MDJXJ7-I
+
+        #colors
+        app.cream = rgb(255, 243, 217)
+        app.table = rgb(247, 218, 197)
+        app.tableTop = rgb(228, 179, 136)
+        app.text = rgb(230,213,159)
+        app.textBox = rgb(126, 145, 27)
+        app.window = rgb(215, 233, 219)
+        app.windowPane = rgb(164,183,179)
+
+        #start screen
+        app.startPress = False
+        app.addFlav = False
+        app.addDip = False
+        app.addTopping = False
+
+        app.points = 0
+
+        #popsicle setup
+        app.stickX = 500
+        app.stickY = 680
+        app.popsicleList = PopsicleGroup(app.stickX, app.stickY, flavor = 'None', dip = 'None', topping = 'None', toppingPositions = ())    #initialize with list with nothing
+        app.currPopsicle = Popsicle(app.stickX, app.stickY, flavor = 'None', dip = 'None', topping = 'None', toppingPositions = ())
+
+        app.inBarrier = False
+        app.inTrashX = 0
+        app.inTrashY = 0
+
+        #stuff on flavor screen
+        app.chosenFlav = None
+        app.readyFreeze = False
+        app.freezing = False
+        app.leftFreezer = False
+        app.timer = 5
+        app.stepsPerSecond = 1
+        app.stepsPerSecondB = 0.05
+        app.paused = True
+        strawberry = Flavor('Strawberry', rgb(174,36,54), (200, 435))
+        oreo = Flavor('Oreo', rgb(3,82,168), (310, 555))
+        app.flavorList = [strawberry, oreo]
+
+        #stuff on dip screen
+        app.chosenDip = None
+        fudge = Dip('Fudge', rgb(90,47,41), (200, 435))
+        honey = Dip('Honey', rgb(214,156,84), (310, 555))
+        app.dipList = [fudge, honey]
+
+        #stuff on topping screen
+        app.chosenTopping = None
+        app.placeSprinkle = False
+        app.xPress = 0
+        app.yPress = 0
+        app.readyToTop = False
+        app.dragDraw = False
+        
+        #each topping type
+        app.imageA = openImage('sprinkleTub.png')   #https://previews.123rf.com/images/zakspeed271/zakspeed2712004/zakspeed271200400097/145509376-colorful-hundreds-and-thousands-cake-sprinkles-in-a-plastic-tub-creating-a-circle.jpg
+        app.sprinkleImage = app.imageA.resize((220, 150))
+        app.sprinkleImage = CMUImage(app.sprinkleImage)
+        app.sprPurple = rgb(134,58,117)
+        app.sprGreen = rgb(178,204,69)
+        app.sprBlue = rgb(107,199,214)
+        app.sprWhite = 'white'
+        app.sprPink = rgb(244,99,133)
+        app.sprinklePositions = []
+        app.orderSprinklePos = []
+        sprinkles = Topping('Sprinkles', app.sprinkleImage, (200, 435), app.sprinklePositions)
+        app.toppingList = [sprinkles]
+        app.creamPositions = []
+        app.orderCreamPos = []
+        app.marshmallowPositions = []
+        app.orderMarshPos = []
+        app.tapiocaPositions = []
+        app.orderTapiocaPos = []
+        app.peanutsPositions = []
+        app.orderNutPos = []
+        app.topPos = ()
+
+        #order setup
+        app.orderList = orderedPaleta(flavor = strawberry, dip = fudge, topping = sprinkles, toppingPositions = (app.stickX, app.stickY))
+        app.currOrder = Popsicle(900, 150, app.flavorList[0], app.dipList[0], app.toppingList[0], (app.orderSprinklePos))
+
+
+# -- points -- 
+
+def unlockNewOptions(app):
+    chocolate = Flavor('Chocolate', rgb(146,87,60), (420, 435))
+    vanilla = Flavor('Vanilla', rgb(252,244,222), (530, 555))
+    pistachio = Flavor('Pistachio', rgb(147,197,114), (640, 435))
+    
+    matcha = Dip('Matcha', rgb(116,161,46), (420, 435))
+    caramel = Dip('Caramel', rgb(255,213,154), (530,555))
+    cherry = Dip('Cherry', rgb(182,38,37), (640,435))
+
+    app.imageB = openImage('whippedCream.png')  #https://media.istockphoto.com/id/506766538/photo/italian-meringue.jpg?s=612x612&w=0&k=20&c=Iur9Uqr6pVD2sBEJ8bYqbTP4i1CjszeSmgnoUqksUSQ=
+    app.whippedCreamImage = app.imageB.resize((140, 140))
+    app.whippedCreamImage = CMUImage(app.whippedCreamImage)
+    whippedCream = Topping('Whipped Cream', app.whippedCreamImage, (310, 555), app.creamPositions)
+
+    app.imageC = openImage('marshmallows.png')  #https://www.verywellfit.com/thmb/dLWhxrC27RsGvARi_BjTbUCr8sk=/1500x0/filters:no_upscale():max_bytes(150000):strip_icc()/marshmallows-crop-54c6178949fc41258ba4cc11c7a9d635.jpg
+    app.marshmallowsImage = app.imageC.resize((155, 130))
+    app.marshmallowsImage = CMUImage(app.marshmallowsImage)
+    marshmallow = Topping('Marshmallows', app.marshmallowsImage, (420, 435), app.marshmallowPositions)
+
+    app.imageD = openImage('tapioca.png')   #https://c8.alamy.com/comp/2FMNEJG/top-view-of-raw-tapioca-pearls-in-round-bowl-cutout-on-white-background-2FMNEJG.jpg
+    app.tapiocaImage = app.imageD.resize((140, 150)) 
+    app.tapiocaImage = CMUImage(app.tapiocaImage)
+    tapioca = Topping('Tapioca', app.tapiocaImage, (530, 555), app.tapiocaPositions)
+
+    app.imageE = openImage('peanuts.png')   #https://media.istockphoto.com/id/155420683/photo/peanuts.jpg?s=612x612&w=0&k=20&c=se5WxaIXc0x2wTeVTq3w3M-oPdODJxyBAxX8a_Fkgg8=
+    app.peanutsImage = app.imageE.resize((140, 140))
+    app.peanutsImage = CMUImage(app.peanutsImage)
+    peanuts = Topping('Peanuts', app.peanutsImage, (640, 435), app.peanutsPositions)
+
+    if app.points >= 200 and len(app.dipList) == 4 and len(app.toppingList) == 4:
+        app.dipList.append(cherry)
+        app.toppingList.append(peanuts)
+        app.points -= 200
+    elif app.points >= 175 and len(app.flavorList) == 4 and len(app.toppingList) == 3:
+        app.flavorList.append(pistachio)
+        app.toppingList.append(tapioca)
+        app.points -= 175
+    elif app.points >= 150 and len(app.dipList) == 3 and len(app.toppingList) == 2:
+        app.dipList.append(caramel)
+        app.toppingList.append(marshmallow)
+        app.points -= 150
+    elif app.points >= 140 and len(app.flavorList) == 3 and len(app.dipList) == 2:
+        app.flavorList.append(vanilla)
+        app.dipList.append(matcha)
+        app.points -= 140
+    elif app.points >= 125 and len(app.toppingList) == 1:
+        app.toppingList.append(whippedCream)
+        app.points -= 125
+    elif len(app.flavorList) == 2 and app.points >= 100:
+        app.flavorList.append(chocolate)
+        app.points -= 100
+    else:
+        app.points += 0                  
+                                                                                                                                        
+def finishedPoints(app):                                                        
+    app.points += 20
+
+def orderFinished(app):                                             
+    if app.currPopsicle.flavor == app.currOrder.flavor:                         
+        app.points += 30
+    if app.currPopsicle.dip == app.currOrder.dip:
+        app.points += 30
+    for j in range(len(app.topPos)): #j goes thru the lists in the topping tuple
+        for i in range(len(app.topPos[j])): #i goes through the position tuples within the lists
+            for k in range(len(app.currPopsicle.toppingPositions)): #k goes through the various toppings
+                for h in range(len(app.currPopsicle.toppingPositions[k])): #h goes through the tuples in the various toppings    
+                    if math.isclose(app.topPos[j][i][0], app.sprinklePositions[k][h][0], rel_tol = 2):
+                        if math.isclose(app.orderSprinklePos[j][i][1], app.sprinklePositions[k][h][1], rel_tol = 2):
+                            app.points += 10
+                    break
+    
+def distance(x1, y1, x2, y2):
+    return ((x2-x1)**2 + (y2-y1)**2)**0.5
+
+def main():
+    runAppWithScreens(initialScreen='welcome')
+
+main()
